@@ -1,7 +1,25 @@
 from flask import session, redirect, url_for, render_template, request
 from . import main
-from .forms import LoginForm
+from .forms import LoginForm, RequestKeyForm
+import secrets
+import sys
 
+sessionKey = secrets.token_hex(32)
+secret = 'bil548'
+
+roomCounter = 5
+peopleCounter = 0
+
+allRooms = {} #dictionary of all rooms, room name - room key pairs
+for i in range(roomCounter):
+    roomName = 'room' + str(i)
+    allRooms[roomName] = secrets.token_hex(16)
+    
+print( allRooms)
+
+peoplePerRoom = {} #dictionary of all people in each room
+allPeople = [] #array of all people
+allSessionKeys = {} #dictionary of all session keys, person - session key pairs
 
 @main.route('/', methods=['GET', 'POST'])
 def index():
@@ -10,12 +28,20 @@ def index():
     if form.validate_on_submit():
         session['name'] = form.name.data
         session['room'] = form.room.data
-        return redirect(url_for('.chat'))
+        session['key'] = form.key.data
+        if( session['key'] != allRooms[session['room']]):
+            session['error'] = 'invalid_key'
+            return redirect(url_for('.error'))
+        if( session['name'] not in allPeople):
+            allPeople.append(session['name'])
+            allSessionKeys[session['name']] = '123456'
+        return render_template('chat.html', username=session['name'], room=session['room'], key=session['key'])
     elif request.method == 'GET':
         form.name.data = session.get('name', '')
         form.room.data = session.get('room', '')
+        form.key.data = session.get('key', '')
     return render_template('index.html', form=form)
-
+    
 
 @main.route('/chat')
 def chat():
@@ -23,6 +49,52 @@ def chat():
     the session."""
     name = session.get('name', '')
     room = session.get('room', '')
+    key = session.get('key', '')
     if name == '' or room == '':
         return redirect(url_for('.index'))
-    return render_template('chat.html', name=name, room=room)
+    return render_template('chat.html', username=name, room=room, key=key)
+
+
+@main.route('/initiateSession')
+def initiateSession():
+    form = LoginForm()
+    if form.validate_on_submit():
+        session['name'] = form.name.data
+        session['room'] = form.room.data
+        session['key'] = form.key.data
+        return redirect(url_for('.chat'))
+    elif request.method == 'GET':
+        form.name.data = session.get('name', '')
+        form.room.data = session.get('room', '')
+        form.key.data = session.get('key', '')
+    return render_template('initiateSession.html', form = form)
+    
+    
+@main.route('/requestKey', methods=['GET', 'POST'])
+def requestKey():
+    ##THESE VALUES ARE USED IN HTML FILES##
+    name = session.get('name', '')
+    room = session.get('room', '')
+    key = allRooms[room]
+    form = RequestKeyForm()
+    if form.validate_on_submit():
+        session['name'] = form.name.data
+        session['room'] = form.room.data
+        return redirect(url_for('.requestKey'))
+    elif request.method == 'GET':
+        form.name.data = session.get('name', '')
+        form.room.data = session.get('room', '')
+    return render_template('requestKey.html', form = form, key=key, room=room, username=name)
+    
+    
+@main.route('/error')
+def error():
+    error = session.get('error', '')
+    if error == 'invalid_key':
+        return render_template('errorPage.html', note='Room key is incorrect.')
+    return render_template('errorPage.html')
+   
+    
+    
+    
+    
