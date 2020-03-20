@@ -1,0 +1,16 @@
+<html>
+    <head>
+        <title>Flask-SocketIO-Chat</title>
+    </head>
+		
+    <body>
+        <h1>Error: {{ note }}</h1><br>
+        <a href="#" onclick="leave_room();">Index page</a>
+    </body>
+	<script type="text/javascript" charset="utf-8">
+        function leave_room() {
+        	// go back to the login page
+            window.location.href = "{{ url_for('main.index') }}";
+        }
+    </script>
+</html>

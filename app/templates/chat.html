@@ -3,30 +3,99 @@
         <title>Flask-SocketIO-Chat: {{ room }}</title>
         <script type="text/javascript" src="//code.jquery.com/jquery-1.4.2.min.js"></script>
         <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
-        <script type="text/javascript" charset="utf-8">
+		<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/hmac-sha256.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/enc-base64.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9/mode-cfb.min.js"></script>
+		<script type="text/javascript" charset="utf-8">
             var socket;
+			var sessionkey = 'f4bfdeff0cb4982d04c0da2ee79e446e';
+			
             $(document).ready(function(){
                 socket = io.connect('http://' + document.domain + ':' + location.port + '/chat');
                 socket.on('connect', function() {
                     socket.emit('joined', {});
                 });
+				
+				//new members & left members
                 socket.on('status', function(data) {
                     $('#chat').val($('#chat').val() + '<' + data.msg + '>\n');
                     $('#chat').scrollTop($('#chat')[0].scrollHeight);
                 });
+				
+				//receiving messages
                 socket.on('message', function(data) {
-                    $('#chat').val($('#chat').val() + data.msg + '\n');
+					var roomkey = "{{ key }}";
+					var message = data.msg;
+					
+
+				    var key = CryptoJS.enc.Utf8.parse(roomkey);
+					//$('#chat').val($('#chat').val() + key + '\n');//data.msg + '\n');
+					
+					$('#chat').val($('#chat').val() + '-----\n');//data.msg + '\n');
+					
+				    // decryption
+				    var decrypted = CryptoJS.AES.decrypt({ciphertext: data.msg}, sessionkey, {
+				      	iv: '0000000000000000',
+				      	mode: CryptoJS.mode.CBC,
+						padding: CryptoJS.pad.Pkcs7
+				    });
+					
+					
+					$('#chat').val($('#chat').val() + '_______\n');//data.msg + '\n');
+				    decrypted = decrypted.toString(CryptoJS.enc.Utf8);
+					$('#chat').val($('#chat').val() + decrypted + '\nDECRYPTED\n');//data.msg + '\n');
+					
+					
+                    $('#chat').val($('#chat').val() + message + '\nMESSAGE\n');//data.msg + '\n');
+					$('#chat').val($('#chat').val() + '*****\n');//data.msg + '\n');
+					$('#chat').val($('#chat').val() + decrypted + '\n');//data.msg + '\n');
                     $('#chat').scrollTop($('#chat')[0].scrollHeight);
                 });
+				
+				//sending messages
                 $('#text').keypress(function(e) {
                     var code = e.keyCode || e.which;
                     if (code == 13) {
                         text = $('#text').val();
                         $('#text').val('');
-                        socket.emit('text', {msg: text});
+						var roomname = "{{ room }}";
+						var username = "{{ username }}";
+						var roomkey = "{{ key }}";
+						
+						//MAC calculation
+						var hash = CryptoJS.HmacSHA256( text, 'bil548'); //bil548 = secret
+						var hashInBase64 = CryptoJS.enc.Base64.stringify( hash);
+						
+						if( text == "") //parsing purposes
+							text = " ";
+						var temp = username + "|||" + text + "|||" + hashInBase64;
+						
+						/*
+						https://stackoverflow.com/questions/59488728/aes-encrypt-in-cryptojs-decrypt-in-pycrypto
+						*/
+						//first iteration
+						var salt = "1234salt";
+						var iterations = 128;
+						var bytes = CryptoJS.PBKDF2(roomkey, salt, { keySize: 48, iterations: iterations });
+						var iv = CryptoJS.enc.Hex.parse(bytes.toString().slice(0, 32));
+						var key = CryptoJS.enc.Hex.parse(bytes.toString().slice(32, 96));
+						var ciphertext = CryptoJS.AES.encrypt(temp, key, { iv: iv });
+						temp = username + '|||' + roomname + '|||' + ciphertext;
+						
+						//second iteration
+						bytes = CryptoJS.PBKDF2(sessionkey, salt, { keySize: 48, iterations: iterations });
+						iv = CryptoJS.enc.Hex.parse(bytes.toString().slice(0, 32));
+						key = CryptoJS.enc.Hex.parse(bytes.toString().slice(32, 96));
+						ciphertext = CryptoJS.AES.encrypt(temp, key, { iv: iv });
+						
+						socket.emit('text', {msg: ciphertext.toString()});
                     }
                 });
             });
+			
             function leave_room() {
                 socket.emit('left', {}, function() {
                     socket.disconnect();
@@ -35,6 +104,51 @@
                     window.location.href = "{{ url_for('main.index') }}";
                 });
             }
+			
+			
+			/*
+			https://stackoverflow.com/questions/21647928/javascript-unicode-string-to-hex
+			*/
+			function toHex(str,hex){
+			  try{
+			    hex = unescape(encodeURIComponent(str))
+			    .split('').map(function(v){
+			      return v.charCodeAt(0).toString(16)
+			    }).join('')
+			  }
+			  catch(e){
+			    hex = str
+			    console.log('invalid text input: ' + str)
+			  }
+			  return hex
+			}
+			
+			function decryptMsg (data, key) {
+			    master_key = key;
+				
+			    // Decode the base64 data so we can separate iv and crypt text.
+			    //var rawData = atob(data);
+				
+			    // Split by 16 because my IV size
+			    var iv = '0000000000000000';
+			    var crypttext = data;
+
+			    // Decrypt
+			    var plaintextArray = CryptoJS.AES.decrypt(
+					{ ciphertext:  crypttext},
+					CryptoJS.enc.Utf8.parse(key),
+					{
+						iv: '0000000000000000', 
+						mode: CryptoJS.mode.CBC, 
+						padding: CryptoJS.pad.Pkcs7
+					}
+				);
+
+			    // Can be Utf8 too
+			    output_plaintext = CryptoJS.enc.Latin1.stringify(plaintextArray);
+			    console.log("plain text : " + output_plaintext);
+				return output_plaintext;
+			}
         </script>
     </head>
     <body>
@@ -43,4 +157,5 @@
         <input id="text" size="80" placeholder="Enter your message here"><br><br>
         <a href="#" onclick="leave_room();">Leave this room</a>
     </body>
+	
 </html>
