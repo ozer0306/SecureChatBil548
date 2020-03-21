@@ -1,8 +1,11 @@
 from flask import session, redirect, url_for, render_template, request
+from flask import make_response
 from . import main
 from .forms import LoginForm, RequestKeyForm
 import secrets
 import sys
+from Crypto.Cipher import AES
+import binascii
 
 sessionKey = secrets.token_hex(32)
 secret = 'bil548'
@@ -94,7 +97,25 @@ def error():
         return render_template('errorPage.html', note='Room key is incorrect.')
     return render_template('errorPage.html')
    
+
+@main.route('/aes', methods=['GET', 'POST'])
+def aes():
+   message = None
+   if request.method == 'POST':
+        key = request.form['_key']
+        iv = request.form['_iv']
+        text = request.form['_text']
+        result = decrypt(key, iv, text)
+        resp = make_response(result)
+        resp.headers['Content-Type'] = "application/json"
+        return resp
     
+
+def decrypt(key, iv, encrypted_text):
+    aes = AES.new(key, AES.MODE_CBC, iv, segment_size=128)
+    encrypted_text_bytes = binascii.a2b_hex(encrypted_text)
+    decrypted_text = aes.decrypt(encrypted_text_bytes)
+    return decrypted_text.decode('ascii')
     
     
     

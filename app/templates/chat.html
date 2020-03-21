@@ -30,28 +30,18 @@
 					var roomkey = "{{ key }}";
 					var message = data.msg;
 					
-
-				    var key = CryptoJS.enc.Utf8.parse(roomkey);
-					//$('#chat').val($('#chat').val() + key + '\n');//data.msg + '\n');
-					
-					$('#chat').val($('#chat').val() + '-----\n');//data.msg + '\n');
-					
-				    // decryption
-				    var decrypted = CryptoJS.AES.decrypt({ciphertext: data.msg}, sessionkey, {
-				      	iv: '0000000000000000',
-				      	mode: CryptoJS.mode.CBC,
-						padding: CryptoJS.pad.Pkcs7
-				    });
+					var decrypted = runPyScript( sessionkey, '0000000000000000', message)
+					decrypted = decrypted.substring( 0, decrypted.indexOf("=") + 2); //remove padding
+					var roomname = decrypted.substring( 0, decrypted.indexOf("|")); //remove padding
+					var temp = decrypted.substring( decrypted.indexOf("|") + 3);
+					//decrypted = runPyScript( roomkey, '0000000000000000', base64ToHex(temp)
 					
 					
-					$('#chat').val($('#chat').val() + '_______\n');//data.msg + '\n');
-				    decrypted = decrypted.toString(CryptoJS.enc.Utf8);
+					$('#chat').val('xxxxxx\n' + temp + '\nxxxxxx\n');//data.msg + '\n');
+					$('#chat').val($('#chat').val() + message + '\nMESSAGE\n');//data.msg + '\n');
 					$('#chat').val($('#chat').val() + decrypted + '\nDECRYPTED\n');//data.msg + '\n');
-					
-					
-                    $('#chat').val($('#chat').val() + message + '\nMESSAGE\n');//data.msg + '\n');
-					$('#chat').val($('#chat').val() + '*****\n');//data.msg + '\n');
-					$('#chat').val($('#chat').val() + decrypted + '\n');//data.msg + '\n');
+					$('#chat').scrollTop($('#chat')[0].scrollHeight);
+
                     $('#chat').scrollTop($('#chat')[0].scrollHeight);
                 });
 				
@@ -105,49 +95,18 @@
                 });
             }
 			
-			
 			/*
-			https://stackoverflow.com/questions/21647928/javascript-unicode-string-to-hex
+			https://stackoverflow.com/questions/32288722/call-python-function-from-js
 			*/
-			function toHex(str,hex){
-			  try{
-			    hex = unescape(encodeURIComponent(str))
-			    .split('').map(function(v){
-			      return v.charCodeAt(0).toString(16)
-			    }).join('')
-			  }
-			  catch(e){
-			    hex = str
-			    console.log('invalid text input: ' + str)
-			  }
-			  return hex
-			}
-			
-			function decryptMsg (data, key) {
-			    master_key = key;
-				
-			    // Decode the base64 data so we can separate iv and crypt text.
-			    //var rawData = atob(data);
-				
-			    // Split by 16 because my IV size
-			    var iv = '0000000000000000';
-			    var crypttext = data;
+			function runPyScript(key, iv, text){
+			        var jqXHR = $.ajax({
+			            type: "POST",
+			            url: "/aes",
+			            async: false,
+			            data: { _key: key, _iv: iv, _text: text}
+			        });
 
-			    // Decrypt
-			    var plaintextArray = CryptoJS.AES.decrypt(
-					{ ciphertext:  crypttext},
-					CryptoJS.enc.Utf8.parse(key),
-					{
-						iv: '0000000000000000', 
-						mode: CryptoJS.mode.CBC, 
-						padding: CryptoJS.pad.Pkcs7
-					}
-				);
-
-			    // Can be Utf8 too
-			    output_plaintext = CryptoJS.enc.Latin1.stringify(plaintextArray);
-			    console.log("plain text : " + output_plaintext);
-				return output_plaintext;
+			        return jqXHR.responseText;
 			}
         </script>
     </head>

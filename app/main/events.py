@@ -99,15 +99,22 @@ def text(message):
         print(temp)
         
         for i in allSessionKeys: #send to all clients with their session keys
-            x = encrypt( "hii", "passphrase")
-            print(x)
-            y = decrypt(x, "passphrase")
-            print(y)
+            temp = temp + '0' * (16 - len(temp)%16)
+            encrypted = encrypt( allSessionKeys[i], '0000000000000000', temp)
+            decrypted = decrypt( allSessionKeys[i], '0000000000000000', encrypted)
+            decrypted = (decrypted.split("=="))[0] + "=="
+            encrypted = (str(encrypted))[2:-1]
             
-
-        
+            """
+            """
+            print("encrypted: ")
+            print(encrypted)
+            
+            print("decrypted: ")
+            print(decrypted)
+            
             #following makes new messages seen in chat
-            emit('message', {'msg': temp}, room=room)
+            emit('message', {'msg': encrypted}, room=room)
             #room=clients[0]
     
 
@@ -123,20 +130,18 @@ def left(message):
     emit('status', {'msg': session.get('name') + ' has left the room.'}, room=room)
 
     
+"""
+https://chase-seibert.github.io/blog/2016/01/29/cryptojs-pycrypto-ios-aes256.html
+"""    
     
-BLOCK_SIZE=16
-def trans(key):
-     return md5.new(key).digest()
+def encrypt(key, iv, plaintext):
+    aes = AES.new(key, AES.MODE_CBC, iv, segment_size=128)
+    encrypted_text = aes.encrypt(plaintext)
+    return binascii.b2a_hex(encrypted_text).rstrip()
 
-def encrypt(message, passphrase):
-    passphrase = trans(passphrase)
-    IV = Random.new().read(BLOCK_SIZE)
-    aes = AES.new(passphrase, AES.MODE_CFB, IV)
-    return base64.b64encode(IV + aes.encrypt(message))
 
-def decrypt(encrypted, passphrase):
-    passphrase = trans(passphrase)
-    encrypted = base64.b64decode(encrypted)
-    IV = encrypted[:BLOCK_SIZE]
-    aes = AES.new(passphrase, AES.MODE_CFB, IV)
-    return aes.decrypt(encrypted[BLOCK_SIZE:])
+def decrypt(key, iv, encrypted_text):
+    aes = AES.new(key, AES.MODE_CBC, iv, segment_size=128)
+    encrypted_text_bytes = binascii.a2b_hex(encrypted_text)
+    decrypted_text = aes.decrypt(encrypted_text_bytes)
+    return decrypted_text.decode('ascii')
