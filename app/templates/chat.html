@@ -28,21 +28,30 @@
 				//receiving messages
                 socket.on('message', function(data) {
 					var roomkey = "{{ key }}";
-					var message = data.msg;
+					var data = data.msg;
 					
-					var decrypted = runPyScript( sessionkey, '0000000000000000', message)
+					//first iteration of decryption
+					var decrypted = runPyScript( sessionkey, '0000000000000000', data)
 					decrypted = decrypted.substring( 0, decrypted.indexOf("=") + 2); //remove padding
-					var roomname = decrypted.substring( 0, decrypted.indexOf("|")); //remove padding
+					var roomname = decrypted.substring( 0, decrypted.indexOf("|"));
 					var temp = decrypted.substring( decrypted.indexOf("|") + 3);
-					//decrypted = runPyScript( roomkey, '0000000000000000', base64ToHex(temp)
 					
+					//second iteration of decryption
+					var plaintext = decrypt(temp, roomkey);
+					var username = plaintext.substring(0, plaintext.indexOf("|"));
+					temp = plaintext.substring(plaintext.indexOf("|") + 3);
+					var message = temp.substring(0, temp.indexOf("|")); // :))
+					var mac = temp.substring(temp.indexOf("|") + 3);
 					
-					$('#chat').val('xxxxxx\n' + temp + '\nxxxxxx\n');//data.msg + '\n');
-					$('#chat').val($('#chat').val() + message + '\nMESSAGE\n');//data.msg + '\n');
-					$('#chat').val($('#chat').val() + decrypted + '\nDECRYPTED\n');//data.msg + '\n');
+					//MAC calculation
+					var hash = CryptoJS.HmacSHA256( message, 'bil548'); //bil548 = secret
+					var mac2 = CryptoJS.enc.Base64.stringify( hash);
+					
+					if( mac != mac2)
+						$('#chat').val($('#chat').val() + 'Attention: MACs do not match for following message!\n');
+					
+					$('#chat').val($('#chat').val() + username + ': ' + message + '\n');
 					$('#chat').scrollTop($('#chat')[0].scrollHeight);
-
-                    $('#chat').scrollTop($('#chat')[0].scrollHeight);
                 });
 				
 				//sending messages
@@ -59,8 +68,8 @@
 						var hash = CryptoJS.HmacSHA256( text, 'bil548'); //bil548 = secret
 						var hashInBase64 = CryptoJS.enc.Base64.stringify( hash);
 						
-						if( text == "") //parsing purposes
-							text = " ";
+						//if( text == "") //parsing purposes --> causes MAC inequality
+						//	text = " ";
 						var temp = username + "|||" + text + "|||" + hashInBase64;
 						
 						/*
@@ -74,6 +83,7 @@
 						var key = CryptoJS.enc.Hex.parse(bytes.toString().slice(32, 96));
 						var ciphertext = CryptoJS.AES.encrypt(temp, key, { iv: iv });
 						temp = username + '|||' + roomname + '|||' + ciphertext;
+						
 						
 						//second iteration
 						bytes = CryptoJS.PBKDF2(sessionkey, salt, { keySize: 48, iterations: iterations });
@@ -108,6 +118,19 @@
 
 			        return jqXHR.responseText;
 			}
+			
+			
+			function decrypt(text, roomkey){
+			        var jqXHR = $.ajax({
+			            type: "POST",
+			            url: "/decrypt2",
+			            async: false,
+			            data: { data: text, key: roomkey}
+			        });
+
+			        return jqXHR.responseText;
+			}
+			
         </script>
     </head>
     <body>

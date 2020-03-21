@@ -5,7 +5,11 @@ from .forms import LoginForm, RequestKeyForm
 import secrets
 import sys
 from Crypto.Cipher import AES
+from Crypto import Random
+from Crypto.Protocol.KDF import PBKDF2
 import binascii
+#import base64
+from base64 import b64decode
 
 sessionKey = secrets.token_hex(32)
 secret = 'bil548'
@@ -109,6 +113,17 @@ def aes():
         resp = make_response(result)
         resp.headers['Content-Type'] = "application/json"
         return resp
+        
+@main.route('/decrypt2', methods=['GET', 'POST'])
+def decrypt2():
+    message = None
+    if request.method == 'POST':
+        data = request.form['data']
+        roomkey = request.form['key']
+        result = decrypt2(data, roomkey)
+        resp = make_response(result)
+        resp.headers['Content-Type'] = "application/json"
+        return resp
     
 
 def decrypt(key, iv, encrypted_text):
@@ -117,5 +132,17 @@ def decrypt(key, iv, encrypted_text):
     decrypted_text = aes.decrypt(encrypted_text_bytes)
     return decrypted_text.decode('ascii')
     
+    
+def decrypt2(data, roomkey):    
+    #print( "inside decrypt2: " + data)
+    data = b64decode(data)
+    byte = PBKDF2( roomkey.encode("utf-8"), "1234salt".encode("utf-8"), 48, 128)
+    iv = byte[0:16]
+    key = byte[16:48]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    text = cipher.decrypt(data)
+    text = text[:-text[-1]].decode("utf-8")
+    #print( "inside decrypt2, done: " + text)
+    return text
     
     
