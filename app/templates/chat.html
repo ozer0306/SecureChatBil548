@@ -16,13 +16,44 @@
             $(document).ready(function(){
                 socket = io.connect('http://' + document.domain + ':' + location.port + '/chat');
                 socket.on('connect', function() {
-                    socket.emit('joined', {});
+					var roomkey = "{{ key }}";
+					var roomname = "{{ room }}";
+					var username = "{{ username }}";
+					
+					/*
+					https://stackoverflow.com/questions/59488728/aes-encrypt-in-cryptojs-decrypt-in-pycrypto
+					*/
+					//first iteration
+					var salt = "1234salt";
+					var iterations = 128;
+					var bytes = CryptoJS.PBKDF2( roomkey, salt, { keySize: 48, iterations: iterations });
+					var iv = CryptoJS.enc.Hex.parse( bytes.toString().slice(0, 32));
+					var key = CryptoJS.enc.Hex.parse( bytes.toString().slice(32, 96));
+					var ciphertext = CryptoJS.AES.encrypt( username, key, { iv: iv });
+					temp = roomname + '|||' + ciphertext;
+					
+					//second iteration
+					bytes = CryptoJS.PBKDF2(sessionkey, salt, { keySize: 48, iterations: iterations });
+					iv = CryptoJS.enc.Hex.parse(bytes.toString().slice(0, 32));
+					key = CryptoJS.enc.Hex.parse(bytes.toString().slice(32, 96));
+					ciphertext = CryptoJS.AES.encrypt(temp, key, { iv: iv });
+					
+                    socket.emit('joined', {msg: ciphertext.toString()});
                 });
 				
 				//new members & left members
                 socket.on('status', function(data) {
-                    $('#chat').val($('#chat').val() + '<' + data.msg + '>\n');
-                    $('#chat').scrollTop($('#chat')[0].scrollHeight);
+					var data = data.msg;
+					var roomkey = "{{ key }}";
+					
+					if( data.includes("left") != -1){
+						var decrypted = runPyScript( sessionkey, '0000000000000000', data)
+						decrypted = decrypted.substring( 0, decrypted.indexOf("=") + 2); //remove padding
+						var username = decrypt(decrypted, roomkey);
+						
+						$('#chat').val($('#chat').val() + '<' + username + ' joined the chatroom>\n');
+	                    $('#chat').scrollTop($('#chat')[0].scrollHeight);
+					}
                 });
 				
 				//receiving messages

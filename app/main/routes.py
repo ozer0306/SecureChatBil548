@@ -125,7 +125,6 @@ def decrypt2():
         resp.headers['Content-Type'] = "application/json"
         return resp
     
-
 def decrypt(key, iv, encrypted_text):
     aes = AES.new(key, AES.MODE_CBC, iv, segment_size=128)
     encrypted_text_bytes = binascii.a2b_hex(encrypted_text)
@@ -134,7 +133,6 @@ def decrypt(key, iv, encrypted_text):
     
     
 def decrypt2(data, roomkey):    
-    #print( "inside decrypt2: " + data)
     data = b64decode(data)
     byte = PBKDF2( roomkey.encode("utf-8"), "1234salt".encode("utf-8"), 48, 128)
     iv = byte[0:16]
@@ -142,7 +140,6 @@ def decrypt2(data, roomkey):
     cipher = AES.new(key, AES.MODE_CBC, iv)
     text = cipher.decrypt(data)
     text = text[:-text[-1]].decode("utf-8")
-    #print( "inside decrypt2, done: " + text)
     return text
     
     

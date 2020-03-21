@@ -27,15 +27,52 @@ sessionkey = 'f4bfdeff0cb4982d04c0da2ee79e446e'
 def joined(message):
     """Sent by clients when they enter a room.
     A status message is broadcast to all people in the room."""
-    name = session.get('name')
-    room = session.get('room')
-    key = session.get('key')
+    #name = session.get('name') ## !! wont be here for long 
+    #room = session.get('room')
+    roomkey = session.get('key')
+    msg = message['msg']
+    
+    
+    """
+    https://stackoverflow.com/questions/59488728/aes-encrypt-in-cryptojs-decrypt-in-pycrypto
+    """ 
+    
+    ###first iteration###
+    data = b64decode(msg)
+    byte = PBKDF2( sessionkey.encode("utf-8"), "1234salt".encode("utf-8"), 48, 128)
+    iv = byte[0:16]
+    key = byte[16:48]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    text = cipher.decrypt(data)
+    text = text[:-text[-1]].decode("utf-8")
+    
+    #alice|||CgfalKOfxRbePrc3P6d..
+    #first iteration of parsing
+    roomname = (text.split('|||'))[0] #first block
+    crypted = (text.split('|||'))[1] #second&last block
+    
+    ###second iteration###
+    data = b64decode(crypted)
+    byte = PBKDF2( roomkey.encode("utf-8"), "1234salt".encode("utf-8"), 48, 128)
+    iv = byte[0:16]
+    key = byte[16:48]
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    plain = cipher.decrypt(data)
+    plain = plain[:-plain[-1]].decode("utf-8")
+    username = plain
+    
     clients.append(request.sid)
-    allClients[name] = request.sid
-    allSessionKeys[name] = 'f4bfdeff0cb4982d04c0da2ee79e446e'
-    join_room(room)
-    print(allSessionKeys)
-    emit('status', {'msg': session.get('name') + ' has entered the room.'}, room=room)
+    allClients[username] = request.sid
+    allSessionKeys[username] = 'f4bfdeff0cb4982d04c0da2ee79e446e' #will change
+    join_room(roomname)
+    #print(allSessionKeys)
+    
+    for i in allSessionKeys: #send to all clients with their session keys
+        if i != username: #do not send to self
+            crypted = crypted + '0' * (16 - len(crypted)%16) #0 padding
+            encrypted = encrypt( allSessionKeys[i], '0000000000000000', crypted)
+            encrypted = (str(encrypted))[2:-1]
+            emit('status', {'msg': encrypted}, room=roomname)
 
 
 ## PART D - Messaging
@@ -91,13 +128,7 @@ def text(message):
         emit('message', {'msg': 'Attention: MACs do not match!'}, room=room)
         print('Attention: MACs do not match!')
     else:
-        """
-        https://chase-seibert.github.io/blog/2016/01/29/cryptojs-pycrypto-ios-aes256.html
-        """
         temp = text.split('|||', 1)[-1]
-        print("temp")
-        print(temp)
-        
         for i in allSessionKeys: #send to all clients with their session keys
             temp = temp + '0' * (16 - len(temp)%16)
             encrypted = encrypt( allSessionKeys[i], '0000000000000000', temp)
@@ -105,16 +136,8 @@ def text(message):
             decrypted = (decrypted.split("=="))[0] + "=="
             encrypted = (str(encrypted))[2:-1]
             
-            """
-            """
-            print("encrypted: ")
-            print(encrypted)
-            
-            print("decrypted: ")
-            print(decrypted)
-            
             #following makes new messages seen in chat
-            emit('message', {'msg': encrypted}, room=room)
+            emit('message', {'msg': encrypted}, room=allClients[i])
             #room=clients[0]
     
 
