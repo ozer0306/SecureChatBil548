@@ -8,6 +8,9 @@ from Crypto.Cipher import AES
 from Crypto import Random
 from Crypto.Protocol.KDF import PBKDF2
 import binascii
+import uuid
+from .serverm import ServerM
+from .cryptographicHash import HashOperation
 #import base64
 from base64 import b64decode
 
@@ -35,6 +38,26 @@ def index():
     if form.validate_on_submit():
         session['name'] = form.name.data
         session['room'] = form.room.data
+        hashedPassword = HashOperation.hashBasedOnPassword(form.room.data)
+
+        userName = form.name.data
+
+        challangeFromServer = ServerM.insertUser(userName, hashedPassword)
+
+        # Encrpyt challenge with the hash of the password
+        iv = b'Sixteen byte key'
+        cipher = AES.new(hashedPassword, AES.MODE_CFB, iv)
+        msg = cipher.encrypt(challangeFromServer)
+        status = ServerM.getEncrytedMessage(msg, userName)
+        print(status)
+        if status == True:
+            sessionKeyTrue = uuid.uuid1()
+        ################################################# SESSION KEY BURADA DEVREYE GİRİYOR#################
+
+
+
+
+
         session['key'] = form.key.data
         if( session['key'] != allRooms[session['room']]):
             session['error'] = 'invalid_key'
