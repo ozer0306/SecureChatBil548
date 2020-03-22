@@ -1,0 +1,144 @@
+<html>
+    <head>
+        <title>Flask-SocketIO-Chat: {{ room }}</title>
+        <script type="text/javascript" src="//code.jquery.com/jquery-1.4.2.min.js"></script>
+        <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+		<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/hmac-sha256.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/enc-base64.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9/mode-cfb.min.js"></script>
+		<script type="text/javascript" charset="utf-8">
+            var socket;
+			var sessionkey = 'f4bfdeff0cb4982d04c0da2ee79e446e';
+
+            $(document).ready(function(){
+                socket = io.connect('http://' + document.domain + ':' + location.port + '/chat');
+                socket.on('connect', function() {
+                    socket.emit('joined', {});
+                });
+
+				//new members & left members
+                socket.on('status', function(data) {
+                    $('#chat').val($('#chat').val() + '<' + data.msg + '>\n');
+                    $('#chat').scrollTop($('#chat')[0].scrollHeight);
+                });
+
+				//receiving messages
+                socket.on('message', function(data) {
+					var roomkey = "{{ key }}";
+					var data = data.msg;
+
+					//first iteration of decryption
+					var decrypted = runPyScript( sessionkey, '0000000000000000', data)
+					decrypted = decrypted.substring( 0, decrypted.indexOf("=") + 2); //remove padding
+					var roomname = decrypted.substring( 0, decrypted.indexOf("|"));
+					var temp = decrypted.substring( decrypted.indexOf("|") + 3);
+
+					//second iteration of decryption
+					var plaintext = decrypt(temp, roomkey);
+					var username = plaintext.substring(0, plaintext.indexOf("|"));
+					temp = plaintext.substring(plaintext.indexOf("|") + 3);
+					var message = temp.substring(0, temp.indexOf("|")); // :))
+					var mac = temp.substring(temp.indexOf("|") + 3);
+
+					//MAC calculation
+					var hash = CryptoJS.HmacSHA256( message, 'bil548'); //bil548 = secret
+					var mac2 = CryptoJS.enc.Base64.stringify( hash);
+
+					if( mac != mac2)
+						$('#chat').val($('#chat').val() + 'Attention: MACs do not match for following message!\n');
+
+					$('#chat').val($('#chat').val() + username + ': ' + message + '\n');
+					$('#chat').scrollTop($('#chat')[0].scrollHeight);
+                });
+
+				//sending messages
+                $('#text').keypress(function(e) {
+                    var code = e.keyCode || e.which;
+                    if (code == 13) {
+                        text = $('#text').val();
+                        $('#text').val('');
+						var roomname = "{{ room }}";
+						var username = "{{ username }}";
+						var roomkey = "{{ key }}";
+
+						//MAC calculation
+						var hash = CryptoJS.HmacSHA256( text, 'bil548'); //bil548 = secret
+						var hashInBase64 = CryptoJS.enc.Base64.stringify( hash);
+
+						//if( text == "") //parsing purposes --> causes MAC inequality
+						//	text = " ";
+						var temp = username + "|||" + text + "|||" + hashInBase64;
+
+						/*
+						https://stackoverflow.com/questions/59488728/aes-encrypt-in-cryptojs-decrypt-in-pycrypto
+						*/
+						//first iteration
+						var salt = "1234salt";
+						var iterations = 128;
+						var bytes = CryptoJS.PBKDF2(roomkey, salt, { keySize: 48, iterations: iterations });
+						var iv = CryptoJS.enc.Hex.parse(bytes.toString().slice(0, 32));
+						var key = CryptoJS.enc.Hex.parse(bytes.toString().slice(32, 96));
+						var ciphertext = CryptoJS.AES.encrypt(temp, key, { iv: iv });
+						temp = username + '|||' + roomname + '|||' + ciphertext;
+
+
+						//second iteration
+						bytes = CryptoJS.PBKDF2(sessionkey, salt, { keySize: 48, iterations: iterations });
+						iv = CryptoJS.enc.Hex.parse(bytes.toString().slice(0, 32));
+						key = CryptoJS.enc.Hex.parse(bytes.toString().slice(32, 96));
+						ciphertext = CryptoJS.AES.encrypt(temp, key, { iv: iv });
+
+						socket.emit('text', {msg: ciphertext.toString()});
+                    }
+                });
+            });
+
+            function leave_room() {
+                socket.emit('left', {}, function() {
+                    socket.disconnect();
+
+                    // go back to the login page
+                    window.location.href = "('http://127.0.0.1:5000/')";
+                });
+            }
+
+			/*
+			https://stackoverflow.com/questions/32288722/call-python-function-from-js
+			*/
+			function runPyScript(key, iv, text){
+			        var jqXHR = $.ajax({
+			            type: "POST",
+			            url: "/aes",
+			            async: false,
+			            data: { _key: key, _iv: iv, _text: text}
+			        });
+
+			        return jqXHR.responseText;
+			}
+
+
+			function decrypt(text, roomkey){
+			        var jqXHR = $.ajax({
+			            type: "POST",
+			            url: "/decrypt2",
+			            async: false,
+			            data: { data: text, key: roomkey}
+			        });
+
+			        return jqXHR.responseText;
+			}
+
+        </script>
+    </head>
+    <body>
+        <h1>Flask-SocketIO-Chat: {{ room }}</h1>
+        <textarea id="chat" cols="80" rows="20"></textarea><br><br>
+        <input id="text" size="80" placeholder="Enter your message here"><br><br>
+        <a href="/" onclick="leave_room();">Leave this room</a>
+    </body>
+
+</html>
+
